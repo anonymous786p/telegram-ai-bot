@@ -1,8 +1,11 @@
+import os
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from excel_manager import ExcelManager
 from ai_engine import answer_question
+from qr_reader import read_qr
 
 manager = ExcelManager()
 
@@ -15,7 +18,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Ask questions\n"
         "• Search by Project\n"
         "• Search by Employee\n"
-        "• Search by UID"
+        "• Search by UID\n"
+        "• Upload a QR Code"
     )
 
 
@@ -25,7 +29,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Examples:\n\n"
         "Who is Alice?\n"
         "Marketing\n"
-        "UID-005"
+        "UID-005\n\n"
+        "Or upload a QR code."
     )
 
 
@@ -39,5 +44,34 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rows = manager.df
 
     answer = answer_question(question, rows)
+
+    await update.message.reply_text(answer)
+
+
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    photo = update.message.photo[-1]
+
+    telegram_file = await photo.get_file()
+
+    os.makedirs("temp", exist_ok=True)
+
+    image_path = "temp/qr.png"
+
+    await telegram_file.download_to_drive(image_path)
+
+    uid = read_qr(image_path)
+
+    if uid is None:
+        await update.message.reply_text("❌ QR Code not detected.")
+        return
+
+    rows = manager.get_by_uid(uid)
+
+    if len(rows) == 0:
+        await update.message.reply_text(f"❌ UID {uid} not found.")
+        return
+
+    answer = answer_question(uid, rows)
 
     await update.message.reply_text(answer)
